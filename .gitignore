@@ -1,9 +1,39 @@
+# IDE
 .idea
-tmp
-bin/xray-darwin-arm64
-bin/config.json
-dist/
-x-ui-*.tar.gz
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
 /x-ui
-/release.sh
+/x-ui.exe
+*.exe
+*.tar.gz
+*.zip
+
+# Binary files
+bin/
+release/
+
+# Temp files
+tmp/
+dist/
 .sync*
+
+# Frontend build
+web/frontend/node_modules/
+web/frontend/dist/
+
+# Local scripts (not needed in repo)
+deploy.ps1
+upload-r2.ps1
+build.sh
+
+# Config files with sensitive data
+bin/config.json
+
+# Database
+*.db
+
+# Logs
+*.log

@@ -1,0 +1,123 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Frontend
+        run: |
+          cd web/frontend
+          npm ci
+          npm run build
+
+      - name: Build Backend
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w" -o x-ui-${{ matrix.goos }}-${{ matrix.goarch }} .
+
+      - name: Package Release
+        run: |
+          mkdir -p release-package
+          cp x-ui-${{ matrix.goos }}-${{ matrix.goarch }} release-package/x-ui
+          cp -r web/frontend/dist release-package/frontend
+          cp -r web/html release-package/html
+          cp -r web/translation release-package/translation
+          cp x-ui.service release-package/
+          chmod +x release-package/x-ui
+          cd release-package
+          tar -czvf ../x-ui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz .
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: x-ui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: x-ui-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: Dualcore X-UI ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Dualcore X-UI ${{ steps.version.outputs.VERSION }}
+            
+            ### 🚀 新特性
+            - 双核架构支持 (Xray + sing-box)
+            - 在线切换代理内核
+            - 自动下载对应架构的内核文件
+            - 支持 Hysteria2、TUIC 等新协议
+            
+            ### 📦 下载
+            - `x-ui-linux-amd64.tar.gz` - 适用于 x86_64 架构
+            - `x-ui-linux-arm64.tar.gz` - 适用于 ARM64 架构
+            
+            ### 📝 安装
+            ```bash
+            bash <(curl -Ls https://raw.githubusercontent.com/OffroadOps/Dual-core-x-ui/main/install.sh)
+            ```
+          files: |
+            artifacts/x-ui-linux-amd64/x-ui-linux-amd64.tar.gz
+            artifacts/x-ui-linux-arm64/x-ui-linux-arm64.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

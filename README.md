@@ -45,31 +45,19 @@
 # 一键安装
 在安装前请确保你的系统支持`bash`环境,且系统网络正常  
 
-&#x26A1;从原版升级也可使用该命令，数据不会丢失&#x26A1;
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/OffroadOps/Dual-core-x-ui/main/install.sh)
+```
 
-```
-bash <(curl -Ls https://raw.githubusercontent.com/FranzKafkaYu/x-ui/master/install.sh)
-```    
-For English Users,please use the following command to install English supported version:  
-```
-bash <(curl -Ls https://raw.githubusercontent.com/FranzKafkaYu/x-ui/master/install_en.sh)
-```
-如需安装指定的版本,可以在上述命令中指定版本号,如指定版本为`0.3.4.4`,安装命令如下：    
-```
-bash <(curl -Ls https://raw.githubusercontent.com/FranzKafkaYu/x-ui/master/install.sh) 0.3.4.4   
+如需安装指定的版本,可以在上述命令中指定版本号,如指定版本为`v1.0.0`,安装命令如下：    
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/OffroadOps/Dual-core-x-ui/main/install.sh) v1.0.0
 ```
 
 # 效果预览  
-`面板使用`:  
-<details>
-<summary><b>点击查看效果预览</b></summary>  
-  
-![image](https://user-images.githubusercontent.com/38254177/180629631-f76a05c8-ecf0-4685-bbc7-a7058747d213.png)  
-![image](https://user-images.githubusercontent.com/38254177/180629662-b7a325fc-1ebb-47c9-992c-1e7c758a326b.png)
 
+> 📸 新版 React 界面截图即将更新...
 
- </details>  
- 
 `Bot使用`:  
 <details>
 <summary><b>点击查看效果预览</b></summary>  

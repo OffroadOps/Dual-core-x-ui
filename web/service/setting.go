@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	"x-ui/database"
 	"x-ui/database/model"
 	"x-ui/logger"
@@ -20,10 +21,20 @@ import (
 //go:embed config.json
 var xrayTemplateConfig string
 
+// 默认端口将在首次访问时随机生成
+var defaultPort = ""
+
+func getDefaultPort() string {
+	if defaultPort == "" {
+		defaultPort = fmt.Sprintf("%d", random.Port())
+	}
+	return defaultPort
+}
+
 var defaultValueMap = map[string]string{
 	"xrayTemplateConfig": xrayTemplateConfig,
 	"webListen":          "",
-	"webPort":            "54321",
+	"webPort":            "", // 将在 GetPort 中动态生成
 	"webCertFile":        "",
 	"webKeyFile":         "",
 	"secret":             random.Seq(32),
@@ -177,7 +188,20 @@ func (s *SettingService) GetListen() (string, error) {
 }
 
 func (s *SettingService) GetPort() (int, error) {
-	return s.getInt("webPort")
+	setting, err := s.getSetting("webPort")
+	if database.IsNotFound(err) || setting.Value == "" {
+		// 首次运行，生成随机端口并保存
+		port := random.Port()
+		err = s.saveSetting("webPort", fmt.Sprintf("%d", port))
+		if err != nil {
+			logger.Warning("save random port failed:", err)
+		}
+		logger.Infof("Generated random panel port: %d", port)
+		return port, nil
+	} else if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(setting.Value)
 }
 
 func (s *SettingService) SetPort(port int) error {

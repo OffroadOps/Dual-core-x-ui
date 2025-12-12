@@ -11,11 +11,28 @@ type Protocol string
 const (
 	VMess       Protocol = "vmess"
 	VLESS       Protocol = "vless"
-	Dokodemo    Protocol = "Dokodemo-door"
+	Dokodemo    Protocol = "dokodemo-door"
 	Http        Protocol = "http"
 	Trojan      Protocol = "trojan"
 	Shadowsocks Protocol = "shadowsocks"
+	Socks       Protocol = "socks"
+	Wireguard   Protocol = "wireguard"
+	// sing-box 专属协议
+	Hysteria  Protocol = "hysteria"
+	Hysteria2 Protocol = "hysteria2"
+	TUIC      Protocol = "tuic"
+	Naive     Protocol = "naive"
 )
+
+// IsSingBoxOnly 判断协议是否只有 sing-box 支持
+func (p Protocol) IsSingBoxOnly() bool {
+	switch p {
+	case Hysteria, Hysteria2, TUIC, Naive:
+		return true
+	default:
+		return false
+	}
+}
 
 type User struct {
 	Id       int    `json:"id" gorm:"primaryKey;autoIncrement"`

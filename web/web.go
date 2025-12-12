@@ -4,6 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"io"
+	"io/fs"
+	"net"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/BurntSushi/toml"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -11,15 +19,6 @@ import (
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/text/language"
-	"html/template"
-	"io"
-	"io/fs"
-	"net"
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 	"x-ui/config"
 	"x-ui/logger"
 	"x-ui/util/common"
@@ -29,52 +28,11 @@ import (
 	"x-ui/web/service"
 )
 
-//go:embed assets/*
-var assetsFS embed.FS
-
-//go:embed html/*
-var htmlFS embed.FS
+//go:embed frontend/dist/*
+var frontendFS embed.FS
 
 //go:embed translation/*
 var i18nFS embed.FS
-
-var startTime = time.Now()
-
-type wrapAssetsFS struct {
-	embed.FS
-}
-
-func (f *wrapAssetsFS) Open(name string) (fs.File, error) {
-	file, err := f.FS.Open("assets/" + name)
-	if err != nil {
-		return nil, err
-	}
-	return &wrapAssetsFile{
-		File: file,
-	}, nil
-}
-
-type wrapAssetsFile struct {
-	fs.File
-}
-
-func (f *wrapAssetsFile) Stat() (fs.FileInfo, error) {
-	info, err := f.File.Stat()
-	if err != nil {
-		return nil, err
-	}
-	return &wrapAssetsFileInfo{
-		FileInfo: info,
-	}, nil
-}
-
-type wrapAssetsFileInfo struct {
-	fs.FileInfo
-}
-
-func (f *wrapAssetsFileInfo) ModTime() time.Time {
-	return startTime
-}
 
 type Server struct {
 	httpServer *http.Server
@@ -102,48 +60,6 @@ func NewServer() *Server {
 	}
 }
 
-func (s *Server) getHtmlFiles() ([]string, error) {
-	files := make([]string, 0)
-	dir, _ := os.Getwd()
-	err := fs.WalkDir(os.DirFS(dir), "web/html", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		files = append(files, path)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
-func (s *Server) getHtmlTemplate(funcMap template.FuncMap) (*template.Template, error) {
-	t := template.New("").Funcs(funcMap)
-	err := fs.WalkDir(htmlFS, "html", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			newT, err := t.ParseFS(htmlFS, path+"/*.html")
-			if err != nil {
-				// ignore
-				return nil
-			}
-			t = newT
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
 func (s *Server) initRouter() (*gin.Engine, error) {
 	if config.IsDebug() {
 		gin.SetMode(gin.DebugMode)
@@ -164,47 +80,24 @@ func (s *Server) initRouter() (*gin.Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	assetsBasePath := basePath + "assets/"
 
 	store := cookie.NewStore(secret)
 	engine.Use(sessions.Sessions("session", store))
 	engine.Use(func(c *gin.Context) {
 		c.Set("base_path", basePath)
 	})
-	engine.Use(func(c *gin.Context) {
-		uri := c.Request.RequestURI
-		if strings.HasPrefix(uri, assetsBasePath) {
-			c.Header("Cache-Control", "max-age=31536000")
-		}
-	})
-	err = s.initI18n(engine)
-	if err != nil {
-		return nil, err
-	}
 
-	if config.IsDebug() {
-		// for develop
-		files, err := s.getHtmlFiles()
-		if err != nil {
-			return nil, err
-		}
-		engine.LoadHTMLFiles(files...)
-		engine.StaticFS(basePath+"assets", http.FS(os.DirFS("web/assets")))
-	} else {
-		// for prod
-		t, err := s.getHtmlTemplate(engine.FuncMap)
-		if err != nil {
-			return nil, err
-		}
-		engine.SetHTMLTemplate(t)
-		engine.StaticFS(basePath+"assets", http.FS(&wrapAssetsFS{FS: assetsFS}))
-	}
-
+	// API 路由组
 	g := engine.Group(basePath)
-
+	
+	// 只保留必要的 API 控制器
 	s.index = controller.NewIndexController(g)
 	s.server = controller.NewServerController(g)
 	s.xui = controller.NewXUIController(g)
+	controller.NewCoreController(g)
+
+	// React SPA 前端（默认首页）
+	s.initReactFrontend(engine, basePath)
 
 	return engine, nil
 }
@@ -276,6 +169,60 @@ func (s *Server) initI18n(engine *gin.Engine) error {
 	})
 
 	return nil
+}
+
+// initReactFrontend 初始化 React SPA 前端路由（作为默认首页）
+func (s *Server) initReactFrontend(engine *gin.Engine, basePath string) {
+	// 创建子文件系统
+	reactFS, err := fs.Sub(frontendFS, "frontend/dist")
+	if err != nil {
+		logger.Warning("React frontend not found, skipping:", err)
+		return
+	}
+	
+	// 根路径重定向到 React UI
+	engine.GET(basePath, func(c *gin.Context) {
+		c.Redirect(http.StatusFound, basePath+"app/")
+	})
+	
+	// React SPA 路由 - 所有 /app/* 请求
+	engine.GET(basePath+"app/*path", func(c *gin.Context) {
+		path := c.Param("path")
+		
+		// 静态资源请求
+		if strings.HasPrefix(path, "/assets/") {
+			c.FileFromFS(path[1:], http.FS(reactFS)) // 去掉开头的 /
+			return
+		}
+		
+		// 其他静态文件 (如 vite.svg)
+		if strings.Contains(path, ".") && !strings.HasSuffix(path, ".html") {
+			c.FileFromFS(path[1:], http.FS(reactFS))
+			return
+		}
+		
+		// SPA 路由 - 返回 index.html
+		s.serveReactIndex(c, reactFS)
+	})
+}
+
+// serveReactIndex 返回 React 前端的 index.html
+func (s *Server) serveReactIndex(c *gin.Context, reactFS fs.FS) {
+	indexFile, err := reactFS.Open("index.html")
+	if err != nil {
+		c.String(http.StatusNotFound, "React frontend not built")
+		return
+	}
+	defer indexFile.Close()
+	
+	data, err := io.ReadAll(indexFile)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to read index.html")
+		return
+	}
+	
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.String(http.StatusOK, string(data))
 }
 
 func (s *Server) startTask() {

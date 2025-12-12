@@ -1,10 +1,10 @@
-# X-UI
+# Dualcore X-UI
 简体中文|[ENGLISH](./README_EN.md)  
 
-> 声明：该项目仅供个人学习、交流，请遵守当地法律法规,勿用于非法用途;请勿用于生产环境  
-> 声明：该项目已闭源，介意者请勿使用；如您需要开源代码，请附上您的Github Profile邮箱联系  
+> 基于 [FranzKafkaYu/x-ui](https://github.com/FranzKafkaYu/x-ui) 二次开发的双核代理面板
 
-支持单端口多用户、多协议的 xray 面板，究极缝合怪    
+**双核架构** - 同时支持 Xray 和 sing-box 两个代理内核  
+支持单端口多用户、多协议的代理面板，可在线切换内核、自动下载更新  
 通过免费的Telegram bot方便快捷地进行监控、管理你的代理服务  
 &#x26A1;`xtls-rprx-vision`与`reality`快速入手请看[这里](https://github.com/FranzKafkaYu/x-ui/wiki/%E8%8A%82%E7%82%B9%E9%85%8D%E7%BD%AE)  
 欢迎大家使用并反馈意见或提交Pr,帮助项目更好的改善  
@@ -20,9 +20,18 @@
 
 # 功能介绍
 
+## 🚀 新增特性 (Dualcore)
+- **双核架构** - 同时支持 Xray 和 sing-box 内核
+- **在线切换** - 一键切换代理内核，无需重启
+- **自动下载** - 根据系统架构自动下载对应内核 (amd64/arm64/arm)
+- **版本管理** - 支持内核升级、降级
+- **新协议支持** - sing-box 内核支持 Hysteria2、TUIC、Naive 等新协议
+- **React 前端** - 全新 React 18 + Ant Design 5 现代化界面
+
+## 📋 基础功能
 - 系统状态监控
 - 支持单端口多用户、多协议，网页可视化操作
-- 支持的协议：vmess、vless、trojan、shadowsocks、shadowsocks 2022、dokodemo-door、socks、http
+- 支持的协议：vmess、vless、trojan、shadowsocks、socks、http、hysteria2、tuic
 - 支持配置更多传输配置：http、tcp、ws、grpc、kcp、quic
 - 流量统计，限制流量，限制到期时间，一键重置与设备监控
 - 可自定义 xray 配置模板

@@ -1,17 +1,39 @@
 package database
 
 import (
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"x-ui/config"
 	"x-ui/database/model"
+	"x-ui/util/random"
 )
 
 var db *gorm.DB
+
+// InitialCredentials 保存首次安装时生成的随机凭据
+type InitialCredentials struct {
+	Username string
+	Password string
+	Port     int
+}
+
+var initialCredentials *InitialCredentials
+
+// GetInitialCredentials 获取首次安装时生成的凭据（仅在首次安装时有效）
+func GetInitialCredentials() *InitialCredentials {
+	return initialCredentials
+}
+
+// ClearInitialCredentials 清除初始凭据（安全起见，用户确认后应清除）
+func ClearInitialCredentials() {
+	initialCredentials = nil
+}
 
 func initUser() error {
 	err := db.AutoMigrate(&model.User{})
@@ -24,11 +46,32 @@ func initUser() error {
 		return err
 	}
 	if count == 0 {
+		// 首次安装：生成随机用户名和密码
+		username := random.Username(8)
+		password := random.Password(16)
+		
 		user := &model.User{
-			Username: "admin",
-			Password: "admin",
+			Username: username,
+			Password: password,
 		}
-		return db.Create(user).Error
+		err = db.Create(user).Error
+		if err != nil {
+			return err
+		}
+		
+		// 保存初始凭据用于显示给用户
+		if initialCredentials == nil {
+			initialCredentials = &InitialCredentials{}
+		}
+		initialCredentials.Username = username
+		initialCredentials.Password = password
+		
+		fmt.Println("================================================")
+		fmt.Println("  First Install - Generated Credentials")
+		fmt.Println("================================================")
+		fmt.Printf("  Username: %s\n", username)
+		fmt.Printf("  Password: %s\n", password)
+		fmt.Println("================================================")
 	}
 	return nil
 }

@@ -44,7 +44,8 @@
                 <transition name="list" appear>
                     <a-card hoverable>
                         <div slot="title">
-                            <a-button type="primary" icon="plus" @click="openAddInbound"></a-button>
+                            <a-button type="primary" icon="plus" @click="openAddInbound">添加</a-button>
+                            <a-button type="primary" icon="plus" @click="openMultiAddInbound" style="margin-left: 10px;">批量添加(多IP)</a-button>
                         </div>
 <!--                        <a-input v-model="searchKey" placeholder="搜索" autofocus style="max-width: 300px"></a-input>-->
                         <a-table :columns="columns" :row-key="dbInbound => dbInbound.id"
@@ -76,6 +77,10 @@
                             </template>
                             <template slot="protocol" slot-scope="text, dbInbound">
                                 <a-tag color="blue">[[ dbInbound.protocol ]]</a-tag>
+                            </template>
+                            <template slot="listen" slot-scope="text, dbInbound">
+                                <a-tag v-if="dbInbound.listen" color="green">[[ dbInbound.listen ]]</a-tag>
+                                <a-tag v-else color="orange">全部</a-tag>
                             </template>
                             <template slot="traffic" slot-scope="text, dbInbound">
                                 <a-tag color="blue">[[ sizeFormat(dbInbound.up) ]] / [[ sizeFormat(dbInbound.down) ]]</a-tag>
@@ -145,6 +150,11 @@
         align: 'center',
         width: 60,
         scopedSlots: { customRender: 'protocol' },
+    }, {
+        title: "监听IP",
+        align: 'center',
+        width: 80,
+        scopedSlots: { customRender: 'listen' },
     }, {
         title: "端口",
         align: 'center',
@@ -240,6 +250,19 @@
                         inModal.loading();
                         await this.addInbound(inbound, dbInbound);
                         inModal.close();
+                    }
+                });
+            },
+            openMultiAddInbound() {
+                multiInModal.show({
+                    confirm: async (data) => {
+                        multiInModal.setLoading(true);
+                        const msg = await HttpUtil.post('/xui/inbound/addMulti', data);
+                        multiInModal.setLoading(false);
+                        if (msg.success) {
+                            multiInModal.close();
+                            await this.getDBInbounds();
+                        }
                     }
                 });
             },
@@ -358,6 +381,7 @@
 
 </script>
 {{template "inboundModal"}}
+{{template "multiInboundModal"}}
 {{template "promptModal"}}
 {{template "qrcodeModal"}}
 {{template "textModal"}}

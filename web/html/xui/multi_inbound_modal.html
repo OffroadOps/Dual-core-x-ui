@@ -1,0 +1,353 @@
+{{define "multiInboundModal"}}
+<a-modal id="multi-inbound-modal" v-model="multiInModal.visible" :title="multiInModal.title" @ok="multiInModal.ok"
+         :confirm-loading="multiInModal.confirmLoading" :closable="true" :mask-closable="false"
+         :ok-text="multiInModal.okText" cancel-text='{{ i18n "close" }}' width="800px">
+    <a-spin :spinning="multiInModal.loading">
+        <a-form layout="vertical">
+            <a-form-item label="选择 IP 地址">
+                <a-checkbox-group v-model="multiInModal.selectedIPs" style="width: 100%;">
+                    <a-row>
+                        <a-col :span="12" v-for="ip in multiInModal.availableIPs" :key="ip.ip">
+                            <a-checkbox :value="ip.ip">
+                                [[ ip.ip ]] <a-tag size="small">[[ ip.interface ]]</a-tag>
+                                <a-tag v-if="ip.isIPv6" color="blue" size="small">IPv6</a-tag>
+                            </a-checkbox>
+                        </a-col>
+                    </a-row>
+                </a-checkbox-group>
+                <a-button type="link" @click="multiInModal.selectAllIPs" size="small">全选</a-button>
+                <a-button type="link" @click="multiInModal.clearIPs" size="small">清空</a-button>
+            </a-form-item>
+            
+            <a-row :gutter="16">
+                <a-col :span="12">
+                    <a-form-item label="端口模式">
+                        <a-radio-group v-model="multiInModal.portMode">
+                            <a-radio value="same">同端口（不同IP使用相同端口）</a-radio>
+                            <a-radio value="random">递增端口（基础端口+序号）</a-radio>
+                        </a-radio-group>
+                    </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                    <a-form-item label="基础端口">
+                        <a-input-number v-model="multiInModal.basePort" :min="1" :max="65535" style="width: 100%;"></a-input-number>
+                    </a-form-item>
+                </a-col>
+            </a-row>
+
+            <a-row :gutter="16">
+                <a-col :span="12">
+                    <a-form-item label='{{ i18n "remark" }}'>
+                        <a-input v-model.trim="multiInModal.remark" placeholder="备注前缀"></a-input>
+                    </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                    <a-form-item label='{{ i18n "protocol" }}'>
+                        <a-select v-model="multiInModal.protocol" style="width: 100%;">
+                            <a-select-option v-for="p in multiInModal.protocols" :key="p" :value="p">[[ p ]]</a-select-option>
+                        </a-select>
+                    </a-form-item>
+                </a-col>
+            </a-row>
+
+            <a-row :gutter="16">
+                <a-col :span="12">
+                    <a-form-item>
+                        <span slot="label">
+                            总流量(GB)
+                            <a-tooltip>
+                                <template slot="title">0 表示不限制</template>
+                                <a-icon type="question-circle" theme="filled"></a-icon>
+                            </a-tooltip>
+                        </span>
+                        <a-input-number v-model="multiInModal.totalGB" :min="0" style="width: 100%;"></a-input-number>
+                    </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                    <a-form-item>
+                        <span slot="label">
+                            到期时间
+                            <a-tooltip>
+                                <template slot="title">留空则永不到期</template>
+                                <a-icon type="question-circle" theme="filled"></a-icon>
+                            </a-tooltip>
+                        </span>
+                        <a-date-picker :show-time="{ format: 'HH:mm' }" format="YYYY-MM-DD HH:mm"
+                                       v-model="multiInModal.expiryTime" style="width: 100%;"></a-date-picker>
+                    </a-form-item>
+                </a-col>
+            </a-row>
+
+            <!-- VMess 设置 -->
+            <template v-if="multiInModal.protocol === 'vmess'">
+                <a-form-item label="UUID">
+                    <a-input v-model.trim="multiInModal.vmessId"></a-input>
+                    <a-button type="link" @click="multiInModal.vmessId = randomUUID()" size="small">随机生成</a-button>
+                </a-form-item>
+                <a-form-item label="额外ID (alterId)">
+                    <a-input-number v-model="multiInModal.vmessAlterId" :min="0" style="width: 100%;"></a-input-number>
+                </a-form-item>
+            </template>
+
+            <!-- VLESS 设置 -->
+            <template v-if="multiInModal.protocol === 'vless'">
+                <a-form-item label="UUID">
+                    <a-input v-model.trim="multiInModal.vlessId"></a-input>
+                    <a-button type="link" @click="multiInModal.vlessId = randomUUID()" size="small">随机生成</a-button>
+                </a-form-item>
+            </template>
+
+            <!-- Trojan 设置 -->
+            <template v-if="multiInModal.protocol === 'trojan'">
+                <a-form-item label="密码">
+                    <a-input v-model.trim="multiInModal.trojanPassword"></a-input>
+                    <a-button type="link" @click="multiInModal.trojanPassword = randomSeq(10)" size="small">随机生成</a-button>
+                </a-form-item>
+            </template>
+
+            <!-- Shadowsocks 设置 -->
+            <template v-if="multiInModal.protocol === 'shadowsocks'">
+                <a-row :gutter="16">
+                    <a-col :span="12">
+                        <a-form-item label="加密方式">
+                            <a-select v-model="multiInModal.ssMethod" style="width: 100%;">
+                                <a-select-option v-for="m in multiInModal.ssMethods" :key="m" :value="m">[[ m ]]</a-select-option>
+                            </a-select>
+                        </a-form-item>
+                    </a-col>
+                    <a-col :span="12">
+                        <a-form-item label="密码">
+                            <a-input v-model.trim="multiInModal.ssPassword"></a-input>
+                            <a-button type="link" @click="multiInModal.ssPassword = randomSeq(10)" size="small">随机生成</a-button>
+                        </a-form-item>
+                    </a-col>
+                </a-row>
+            </template>
+
+            <a-divider>传输配置</a-divider>
+            <a-row :gutter="16">
+                <a-col :span="12">
+                    <a-form-item label="传输协议">
+                        <a-select v-model="multiInModal.network" style="width: 100%;">
+                            <a-select-option value="tcp">tcp</a-select-option>
+                            <a-select-option value="kcp">kcp</a-select-option>
+                            <a-select-option value="ws">ws</a-select-option>
+                            <a-select-option value="http">http</a-select-option>
+                            <a-select-option value="quic">quic</a-select-option>
+                            <a-select-option value="grpc">grpc</a-select-option>
+                        </a-select>
+                    </a-form-item>
+                </a-col>
+                <a-col :span="12">
+                    <a-form-item label="TLS">
+                        <a-switch v-model="multiInModal.tls"></a-switch>
+                    </a-form-item>
+                </a-col>
+            </a-row>
+
+            <a-alert type="info" style="margin-top: 10px;">
+                <template slot="message">
+                    将创建 <strong>[[ multiInModal.selectedIPs.length ]]</strong> 个入站配置
+                    <template v-if="multiInModal.portMode === 'same'">
+                        ，端口: <strong>[[ multiInModal.basePort ]]</strong>
+                    </template>
+                    <template v-else>
+                        ，端口范围: <strong>[[ multiInModal.basePort ]] - [[ multiInModal.basePort + multiInModal.selectedIPs.length - 1 ]]</strong>
+                    </template>
+                </template>
+            </a-alert>
+        </a-form>
+    </a-spin>
+</a-modal>
+<script>
+const ONE_GB = 1024 * 1024 * 1024;
+
+function randomUUID() {
+    return RandomUtil.randomUUID();
+}
+
+function randomSeq(count) {
+    return RandomUtil.randomSeq(count);
+}
+
+const multiInModal = {
+    title: '批量添加入站',
+    visible: false,
+    confirmLoading: false,
+    loading: false,
+    okText: '批量添加',
+    confirm: null,
+    
+    availableIPs: [],
+    selectedIPs: [],
+    portMode: 'same',
+    basePort: 10000,
+    remark: '',
+    protocol: 'vmess',
+    protocols: ['vmess', 'vless', 'trojan', 'shadowsocks'],
+    totalGB: 0,
+    expiryTime: null,
+    
+    // VMess
+    vmessId: '',
+    vmessAlterId: 0,
+    
+    // VLESS
+    vlessId: '',
+    
+    // Trojan
+    trojanPassword: '',
+    
+    // Shadowsocks
+    ssMethod: 'aes-256-gcm',
+    ssMethods: ['aes-128-gcm', 'aes-256-gcm', 'chacha20-poly1305', 'xchacha20-poly1305'],
+    ssPassword: '',
+    
+    // Stream
+    network: 'tcp',
+    tls: false,
+
+    async loadIPs() {
+        this.loading = true;
+        try {
+            const msg = await HttpUtil.post('/xui/network/ips');
+            if (msg.success) {
+                this.availableIPs = msg.obj || [];
+            }
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    selectAllIPs() {
+        this.selectedIPs = this.availableIPs.map(ip => ip.ip);
+    },
+
+    clearIPs() {
+        this.selectedIPs = [];
+    },
+
+    buildSettings() {
+        switch (this.protocol) {
+            case 'vmess':
+                return JSON.stringify({
+                    clients: [{
+                        id: this.vmessId || randomUUID(),
+                        alterId: this.vmessAlterId
+                    }]
+                });
+            case 'vless':
+                return JSON.stringify({
+                    clients: [{
+                        id: this.vlessId || randomUUID(),
+                        flow: ''
+                    }],
+                    decryption: 'none'
+                });
+            case 'trojan':
+                return JSON.stringify({
+                    clients: [{
+                        password: this.trojanPassword || randomSeq(10)
+                    }]
+                });
+            case 'shadowsocks':
+                return JSON.stringify({
+                    method: this.ssMethod,
+                    password: this.ssPassword || randomSeq(10),
+                    network: 'tcp,udp'
+                });
+            default:
+                return '{}';
+        }
+    },
+
+    buildStreamSettings() {
+        const stream = {
+            network: this.network,
+            security: this.tls ? 'tls' : 'none'
+        };
+        
+        if (this.network === 'tcp') {
+            stream.tcpSettings = { header: { type: 'none' } };
+        } else if (this.network === 'ws') {
+            stream.wsSettings = { path: '/', headers: {} };
+        } else if (this.network === 'kcp') {
+            stream.kcpSettings = { 
+                mtu: 1350, tti: 50, uplinkCapacity: 5, downlinkCapacity: 20,
+                congestion: false, readBufferSize: 2, writeBufferSize: 2,
+                header: { type: 'none' }
+            };
+        } else if (this.network === 'http') {
+            stream.httpSettings = { path: '/', host: [] };
+        } else if (this.network === 'quic') {
+            stream.quicSettings = { security: 'none', key: '', header: { type: 'none' } };
+        } else if (this.network === 'grpc') {
+            stream.grpcSettings = { serviceName: '' };
+        }
+
+        if (this.tls) {
+            stream.tlsSettings = { serverName: '', certificates: [{ certificateFile: '', keyFile: '' }] };
+        }
+
+        return JSON.stringify(stream);
+    },
+
+    buildSniffing() {
+        return JSON.stringify({
+            enabled: true,
+            destOverride: ['http', 'tls']
+        });
+    },
+
+    ok() {
+        if (this.selectedIPs.length === 0) {
+            Vue.prototype.$message.warning('请至少选择一个IP');
+            return;
+        }
+        
+        const data = {
+            ips: this.selectedIPs,
+            portMode: this.portMode,
+            basePort: this.basePort,
+            remark: this.remark,
+            expiryTime: this.expiryTime ? this.expiryTime.valueOf() : 0,
+            total: this.totalGB * ONE_GB,
+            protocol: this.protocol,
+            settings: this.buildSettings(),
+            streamSettings: this.buildStreamSettings(),
+            sniffing: this.buildSniffing()
+        };
+        
+        ObjectUtil.execute(this.confirm, data);
+    },
+
+    async show({ confirm = () => {} }) {
+        this.confirm = confirm;
+        this.visible = true;
+        this.selectedIPs = [];
+        this.vmessId = randomUUID();
+        this.vlessId = randomUUID();
+        this.trojanPassword = randomSeq(10);
+        this.ssPassword = randomSeq(10);
+        await this.loadIPs();
+    },
+
+    close() {
+        this.visible = false;
+        this.confirmLoading = false;
+    },
+
+    setLoading(loading) {
+        this.confirmLoading = loading;
+    }
+};
+
+new Vue({
+    delimiters: ['[[', ']]'],
+    el: '#multi-inbound-modal',
+    data: {
+        multiInModal: multiInModal
+    }
+});
+</script>
+{{end}}

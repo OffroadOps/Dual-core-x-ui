@@ -28,6 +28,7 @@ func (a *InboundController) initRouter(g *gin.RouterGroup) {
 
 	g.POST("/list", a.getInbounds)
 	g.POST("/add", a.addInbound)
+	g.POST("/addMulti", a.addMultiInbound)
 	g.POST("/del/:id", a.delInbound)
 	g.POST("/update/:id", a.updateInbound)
 }
@@ -102,6 +103,70 @@ func (a *InboundController) updateInbound(c *gin.Context) {
 	}
 	err = a.inboundService.UpdateInbound(inbound)
 	jsonMsg(c, "修改", err)
+	if err == nil {
+		a.xrayService.SetToNeedRestart()
+	}
+}
+
+// MultiInboundRequest 批量添加入站请求
+type MultiInboundRequest struct {
+	IPs        []string `json:"ips" form:"ips"`
+	PortMode   string   `json:"portMode" form:"portMode"` // same: 同端口, random: 随机端口
+	BasePort   int      `json:"basePort" form:"basePort"`
+	Remark     string   `json:"remark" form:"remark"`
+	ExpiryTime int64    `json:"expiryTime" form:"expiryTime"`
+	Total      int64    `json:"total" form:"total"`
+
+	Protocol       string `json:"protocol" form:"protocol"`
+	Settings       string `json:"settings" form:"settings"`
+	StreamSettings string `json:"streamSettings" form:"streamSettings"`
+	Sniffing       string `json:"sniffing" form:"sniffing"`
+}
+
+func (a *InboundController) addMultiInbound(c *gin.Context) {
+	req := &MultiInboundRequest{}
+	err := c.ShouldBind(req)
+	if err != nil {
+		jsonMsg(c, "批量添加", err)
+		return
+	}
+
+	if len(req.IPs) == 0 {
+		jsonMsg(c, "批量添加", fmt.Errorf("请至少选择一个IP"))
+		return
+	}
+
+	user := session.GetLoginUser(c)
+	var inbounds []*model.Inbound
+
+	for i, ip := range req.IPs {
+		port := req.BasePort
+		if req.PortMode == "random" {
+			// 随机端口模式：基础端口 + 索引
+			port = req.BasePort + i
+		}
+
+		inbound := &model.Inbound{
+			UserId:         user.Id,
+			Up:             0,
+			Down:           0,
+			Total:          req.Total,
+			Remark:         fmt.Sprintf("%s-%s", req.Remark, ip),
+			Enable:         true,
+			ExpiryTime:     req.ExpiryTime,
+			Listen:         ip,
+			Port:           port,
+			Protocol:       model.Protocol(req.Protocol),
+			Settings:       req.Settings,
+			StreamSettings: req.StreamSettings,
+			Tag:            fmt.Sprintf("inbound-%s-%v", ip, port),
+			Sniffing:       req.Sniffing,
+		}
+		inbounds = append(inbounds, inbound)
+	}
+
+	err = a.inboundService.AddInbounds(inbounds)
+	jsonMsg(c, "批量添加", err)
 	if err == nil {
 		a.xrayService.SetToNeedRestart()
 	}
